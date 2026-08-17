@@ -126,12 +126,23 @@ static void serializeString(const v8::FunctionCallbackInfo<v8::Value> &args) {
   args.GetReturnValue().Set(offset);
 }
 
+#if V8_MAJOR_VERSION >= 13
+// v8 dropped FastApiTypedArray here. GetContents is the replacement that keeps
+// this callback handle-free; ArrayBufferView::Buffer would leak one per call.
+static uint32_t serializeStringFast(Local<Value> receiver, Local<Value> dst,
+                                    const v8::FastOneByteString &src,
+                                    uint32_t offset, uint32_t max_length) {
+  uint8_t storage[64]; // v8 typed_array_max_size_in_heap
+  uint8_t *dst_data =
+      dst.As<v8::Uint8Array>()->GetContents({storage, sizeof(storage)}).data();
+#else
 static uint32_t serializeStringFast(Local<Value> receiver,
                                     const v8::FastApiTypedArray<uint8_t> &dst,
                                     const v8::FastOneByteString &src,
                                     uint32_t offset, uint32_t max_length) {
   uint8_t *dst_data;
   dst.getStorageIfAligned(&dst_data);
+#endif
   offset += writeVarUint32(dst_data, offset,
                            (src.length << 2 | Encoding::LATIN1)); // length
   memcpy(dst_data + offset, src.data, src.length);
