@@ -8,11 +8,13 @@
     "dist",
     "src",
     "scripts/preinstall.js",
+    "scripts/build.js",
     "binding.gyp"
   ],
   "gypfile": false,
   "scripts": {
     "preinstall": "node ./scripts/preinstall.js",
+    "install": "node ./scripts/build.js --native-only",
     "build": "node ./scripts/build.js",
     "prepublishOnly": "npm run build"
   },

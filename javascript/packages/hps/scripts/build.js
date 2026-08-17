@@ -34,8 +34,26 @@ function watchError(child) {
     });
 }
 
+// The native addon is optional: index.ts falls back to the pure JS path when it
+// is absent. A missing build toolchain must not fail the consumer's install.
+function watchOptional(child) {
+    child.on("error", () => {
+      console.warn("hps: native addon build skipped, using the JavaScript fallback");
+    });
+    child.on("exit", (code) => {
+      if (code !== 0) {
+        console.warn("hps: native addon build failed, using the JavaScript fallback");
+      }
+    });
+}
+
 if (versionValid) {
   const gyp = spawn("npx", ["node-gyp", "rebuild"], { stdio: 'inherit', shell: true });
-  watchError(gyp);
+  watchOptional(gyp);
 }
-watchError(spawn("npx", ["tsc"], { stdio: 'inherit', shell: true }));
+
+// The install lifecycle only compiles the addon: published tarballs already
+// carry dist/, and typescript is not a dependency of this package.
+if (!process.argv.includes("--native-only")) {
+  watchError(spawn("npx", ["tsc"], { stdio: 'inherit', shell: true }));
+}
