@@ -17,29 +17,42 @@
  * under the License.
  */
 
-const { spawn } = require("node:child_process");
+const https = require("node:https");
+const fs = require("node:fs");
 const path = require("node:path");
 const version = process.version;
-const fs = require('fs-extra');
 const semver = require("semver");
 const { engines } = require("../package.json");
 const versionValid = semver.satisfies(process.version, engines.node);
 
-async function downloadDeps(urls) {
-    await Promise.all(urls.map(({url, dist}) => {
-        new Promise((resolve, reject) => {
-            fs.ensureDirSync(path.dirname(dist));
-            const process = spawn('curl', [url, '-o', dist]);
-            process.on("close", () => {
-                console.log("finish")
+// Downloaded rather than taken from the node headers: v8-fast-api-calls.h is
+// not part of the public header set node ships. A failure here is not fatal,
+// the addon build then fails and index.ts falls back to the JavaScript path.
+function download(url, dist) {
+    return new Promise((resolve) => {
+        fs.mkdirSync(path.dirname(dist), { recursive: true });
+        https.get(url, (res) => {
+            if (res.statusCode !== 200) {
+                res.resume();
+                console.warn(`hps: download from ${url} failed with status ${res.statusCode}`);
+                return resolve();
+            }
+            const file = fs.createWriteStream(dist);
+            res.pipe(file);
+            file.on("finish", () => file.close(() => resolve()));
+            file.on("error", (error) => {
+                console.warn(`hps: writing ${dist} failed: ${error.message}`);
                 resolve();
             });
-            process.on("error", () => {
-                console.error(`download from ${url} failed`);
-                reject();
-            });
-        })
-    }))
+        }).on("error", (error) => {
+            console.warn(`hps: download from ${url} failed: ${error.message}`);
+            resolve();
+        });
+    });
+}
+
+async function downloadDeps(urls) {
+    await Promise.all(urls.map(({ url, dist }) => download(url, dist)));
 }
 
 async function main() {
